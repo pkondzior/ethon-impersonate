@@ -11,23 +11,23 @@ describe "Impersonate" do
 
   context "when requesting" do
     context "browser impersonation" do
-      let(:url) { "https://postman-echo.com/headers" }
+      let(:url) { "https://httpbin.org/headers" }
 
       it "sets default headers with impersonation" do
         get.setup(easy)
-        easy.impersonate("chrome136")
+        easy.impersonate("chrome142")
         easy.perform
         response = JSON.parse(easy.response_body)
-        expect(response["headers"]).to include("user-agent")
-        expect(response["headers"]["user-agent"]).to include("Chrome/136.0.0.0")
+        expect(response["headers"]).to include("User-Agent")
+        expect(response["headers"]["User-Agent"]).to include("Chrome/142.0.0.0")
       end
 
       it "sets no headers when default_headers is false" do
         get.setup(easy)
-        easy.impersonate("chrome136", default_headers: false)
+        easy.impersonate("chrome142", default_headers: false)
         easy.perform
         response = JSON.parse(easy.response_body)
-        expect(response["headers"]).not_to include("user-agent")
+        expect(response["headers"]).not_to include("User-Agent")
       end
 
       it "raises error for unknown browser" do
