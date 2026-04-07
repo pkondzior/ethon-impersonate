@@ -28,6 +28,98 @@ task :start do
 end
 
 namespace :ethon_impersonate do
+  VENDOR_DIR = File.expand_path("vendor/curl-impersonate", __dir__)
+
+  def make_cmd
+    RUBY_PLATFORM =~ /darwin/ ? "gmake" : "make"
+  end
+
+  desc "Build libcurl-impersonate from vendored source for a specific arch_os target"
+  task :build_from_source, [:arch_os] do |t, args|
+    abort("Please provide an arch_os target (e.g., x86_64-linux)") unless args[:arch_os]
+
+    arch_os = args[:arch_os]
+    os_target = arch_os.split("-").last
+    ext_path = EthonImpersonate::Impersonate::Settings::LIB_EXT_PATH
+    lib_names = EthonImpersonate::Impersonate::Settings.lib_names(os_target)
+
+    build_dir = File.expand_path("tmp/build/#{arch_os}", __dir__)
+    install_dir = File.expand_path("tmp/install/#{arch_os}", __dir__)
+
+    FileUtils.mkdir_p(build_dir)
+    FileUtils.mkdir_p(install_dir)
+    FileUtils.mkdir_p(ext_path)
+
+    Dir.glob("ext/libcurl*").each { |path| FileUtils.rm_rf(path) }
+
+    unless File.exist?(File.join(VENDOR_DIR, "configure"))
+      puts "Running autoreconf in vendored curl-impersonate..."
+      sh("cd #{VENDOR_DIR} && autoreconf -fi")
+    end
+
+    unless File.exist?(File.join(build_dir, "Makefile"))
+      puts "Configuring curl-impersonate for #{arch_os}..."
+      sh("cd #{build_dir} && #{VENDOR_DIR}/configure --prefix=#{install_dir}")
+    end
+
+    puts "Building curl-impersonate (this may take a while)..."
+    sh("cd #{build_dir} && #{make_cmd} build")
+
+    puts "Installing to #{install_dir}..."
+    sh("cd #{build_dir} && #{make_cmd} install DESTDIR=")
+
+    # Copy shared libraries to ext/
+    lib_dir = File.join(install_dir, "lib")
+    copied = false
+
+    Dir.glob(File.join(lib_dir, "libcurl-impersonate*")).each do |src|
+      filename = File.basename(src)
+      # Only copy shared libraries, skip .a and .la files
+      next if filename.end_with?(".a", ".la")
+      dest = File.join(ext_path, filename)
+      FileUtils.cp(src, dest, verbose: true)
+      copied = true
+    end
+
+    abort("No shared libraries found in #{lib_dir}. Build may have failed.") unless copied
+    puts "Shared libraries copied to #{ext_path}:"
+    Dir.glob("ext/libcurl*").each { |f| puts "  #{f}" }
+  end
+
+  desc "Build gem for a specific arch_os target (builds from source)"
+  task :build, [:arch_os] do |t, args|
+    abort("Please provide an arch_os target (e.g., x86_64-linux)") unless args[:arch_os]
+
+    arch_os = args[:arch_os]
+
+    # Build from source
+    Rake::Task["ethon_impersonate:build_from_source"].invoke(arch_os)
+    Rake::Task["ethon_impersonate:build_from_source"].reenable
+
+    # Package into gem
+    gemspec_path = Dir.glob("*.gemspec").first
+    abort("Gemspec file not found!") unless gemspec_path
+
+    gemspec = Bundler.load_gemspec(gemspec_path)
+    target_gem_platforms = EthonImpersonate::Impersonate::Settings::GEM_PLATFORMS_MAP[arch_os] || [arch_os]
+    tmp_dir = "tmp/gemspecs"
+    FileUtils.mkdir_p(tmp_dir)
+
+    puts "Building gem(s) for #{arch_os}..."
+
+    target_gem_platforms.each do |target_gem_platform|
+      temp_gemspec = gemspec.dup
+      temp_gemspec.platform = target_gem_platform
+      temp_gemspec.files += Dir.glob("ext/**/*")
+
+      temp_gemspec_path = File.join(tmp_dir, "#{File.basename(gemspec_path, ".gemspec")}.#{target_gem_platform}.gemspec")
+      File.write(temp_gemspec_path, temp_gemspec.to_ruby)
+
+      sh("gem build #{temp_gemspec_path} ")
+      puts "Gem built successfully: #{target_gem_platform}"
+    end
+  end
+
   desc "Build universal ruby platform gem"
   task :build_universal do
     gemspec_path = Dir.glob("*.gemspec").first
@@ -51,89 +143,6 @@ namespace :ethon_impersonate do
     puts "Pushing #{gem_filename} to RubyGems..."
     system("gem push #{gem_filename}") || abort("Universal gem push failed!")
     puts "Universal gem pushed successfully!"
-  end
-
-  desc "Build gem for a specific arch_os target"
-  task :build, [:arch_os] do |t, args|
-    abort("Please provide an arch_os target (e.g., x86_64-linux)") unless args[:arch_os]
-
-    arch_os = args[:arch_os]
-    os_target = arch_os.split("-").last
-
-    release_url = EthonImpersonate::Impersonate::Settings.release_url(arch_os)
-    release_file = EthonImpersonate::Impersonate::Settings.lib_release_file(arch_os)
-    lib_names = EthonImpersonate::Impersonate::Settings.lib_names(os_target)
-    ext_path = EthonImpersonate::Impersonate::Settings::LIB_EXT_PATH
-
-    download_dir = "tmp/downloads/#{arch_os}"
-    extract_dir = "tmp/extracted/#{arch_os}"
-    tmp_dir = "tmp/gemspecs"
-
-    FileUtils.mkdir_p(download_dir)
-    FileUtils.mkdir_p(extract_dir)
-    FileUtils.mkdir_p(tmp_dir)
-    FileUtils.mkdir_p(ext_path)
-
-    Dir.glob("ext/libcurl*").each { |path| FileUtils.rm_rf(path) }
-
-    download_path = File.join(download_dir, release_file)
-
-    unless File.exist?(download_path)
-      puts "Downloading #{release_url} to #{download_path}..."
-      URI.open(release_url) do |remote_file|
-        File.open(download_path, 'wb') do |file|
-          file.write(remote_file.read)
-        end
-      end
-    end
-
-    puts "Extracting #{download_path} to #{extract_dir}..."
-    Zlib::GzipReader.open(download_path) do |gz|
-      Gem::Package::TarReader.new(gz) do |tar|
-        tar.each do |entry|
-          next unless entry.file?
-
-          filename = File.basename(entry.full_name)
-
-          if lib_names.any? { |lib| filename.start_with?(lib) }
-            dest_path = File.join(ext_path, filename)
-
-            FileUtils.mkdir_p(File.dirname(dest_path))
-            File.open(dest_path, "wb") { |f| f.write(entry.read) }
-            puts "Copied #{entry.full_name} → #{dest_path}"
-          end
-        end
-      end
-    end
-
-    copied_libs = Dir.entries(ext_path).select do |filename|
-      lib_names.any? { |lib| filename.start_with?(lib) }
-    end
-
-    if copied_libs.empty?
-      abort("No matching libraries found in archive for #{arch_os}. Expected one of: #{lib_names.inspect}")
-    end
-
-    gemspec_path = Dir.glob("*.gemspec").first
-    abort("Gemspec file not found!") unless gemspec_path
-
-    gemspec = Bundler.load_gemspec(gemspec_path)
-
-    target_gem_platforms = EthonImpersonate::Impersonate::Settings::GEM_PLATFORMS_MAP[arch_os] || [arch_os]
-
-    puts "Building gem(s) for #{arch_os}..."
-
-    target_gem_platforms.each do |target_gem_platform|
-      temp_gemspec = gemspec.dup
-      temp_gemspec.platform = target_gem_platform
-      temp_gemspec.files += Dir.glob("ext/**/*")
-
-      temp_gemspec_path = File.join(tmp_dir, "#{File.basename(gemspec_path, ".gemspec")}.#{target_gem_platform}.gemspec")
-      File.write(temp_gemspec_path, temp_gemspec.to_ruby)
-
-      sh("gem build #{temp_gemspec_path} ")
-      puts "Gem built successfully: #{target_gem_platform}"
-    end
   end
 
   desc "Install the gem for the current platform after building all platform-specific gems"
@@ -199,7 +208,7 @@ namespace :ethon_impersonate do
     puts "All gems (universal + platform-specific) pushed to RubyGems!"
   end
 
-  desc "Clean up downloaded and extracted files"
+  desc "Clean up build, downloaded, and extracted files"
   task :clean do
     [
       Dir.glob("ext/libcurl*"),

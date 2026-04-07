@@ -23,6 +23,8 @@ module EthonImpersonate
         "chrome133a",
         "chrome136",
         "chrome142",
+        "chrome145",
+        "chrome146",
       ].freeze
 
       CHROME_TARGETS = [
@@ -39,6 +41,7 @@ module EthonImpersonate
         "firefox133",
         "firefox135",
         "firefox144",
+        "firefox147",
       ].freeze
 
       SAFARI_MOBILE_TARGETS = [
@@ -55,6 +58,7 @@ module EthonImpersonate
         "safari180",
         "safari184",
         "safari260",
+        "safari2601",
       ].freeze
 
       SAFARI_TARGETS = [

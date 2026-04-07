@@ -1,0 +1,4 @@
+[submodule "vendor/curl-impersonate"]
+	path = vendor/curl-impersonate
+	url = https://github.com/lexiforest/curl-impersonate.git
+	branch = main

@@ -1,1 +1,7 @@
-*
+# Ignore built shared libraries (produced by build process)
+*.dylib
+*.so
+*.so.*
+*.dll
+*.a
+*.la

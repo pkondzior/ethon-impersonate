@@ -25,5 +25,6 @@ Gem::Specification.new do |s|
     `git ls-files -z`.split("\x0")
   end.reject { |file| file.start_with?(*%w[. Gemfile Guardfile Rakefile profile spec scripts assets]) || file.end_with?(".gitignore") }
 
+  s.extensions = ["ext/curl_impersonate/extconf.rb"]
   s.require_path = "lib"
 end

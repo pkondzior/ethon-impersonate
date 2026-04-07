@@ -6,27 +6,20 @@ require "ffi/platform"
 module EthonImpersonate
   module Impersonate
     module Settings
-      LIB_VERSION = "1.3.0"
+      LIB_VERSION = "1.5.2"
       LIB_EXT_PATH = File.expand_path("../../ext/", File.dirname(__dir__))
 
-      LIB_DOWNLOAD_BASE_URL = "https://github.com/lexiforest/curl-impersonate/releases/download/v#{LIB_VERSION}/"
-
       LIB_OS_FULL_NAME_MAP = {
-        "linux" => ["libcurl-impersonate.so.4.8.0", "libcurl-impersonate.4.8.0.so"],
-        "darwin" => ["libcurl-impersonate.dylib.4", "libcurl-impersonate.4.dylib"],
+        "linux" => ["libcurl-impersonate.so", "libcurl-impersonate.so.4"],
+        "darwin" => ["libcurl-impersonate.dylib", "libcurl-impersonate.4.dylib"],
         "windows" => ["libcurl.dll", "libcurl-impersonate.dll"],
       }.freeze
 
+      # Platforms supported for building from source
       LIB_PLATFORM_RELEASE_MAP = {
-        # "aarch64-linux" => "libcurl-impersonate-v#{LIB_VERSION}.aarch64-linux-gnu.tar.gz",
-        # "arm-linux" => "libcurl-impersonate-v#{LIB_VERSION}.arm-linux-gnueabihf.tar.gz",
-        "aarch64-darwin" => "libcurl-impersonate-v#{LIB_VERSION}.arm64-macos.tar.gz",
-        # "i386-linux" => "libcurl-impersonate-v#{LIB_VERSION}.i386-linux-gnu.tar.gz",
-        # "i686-windows" => "libcurl-impersonate-v#{LIB_VERSION}.i686-win32.tar.gz",
-        # "riscv64-linux" => "libcurl-impersonate-v#{LIB_VERSION}.riscv64-linux-gnu.tar.gz",
-        "x86_64-linux" => "libcurl-impersonate-v#{LIB_VERSION}.x86_64-linux-gnu.tar.gz",
-        "x86_64-darwin" => "libcurl-impersonate-v#{LIB_VERSION}.x86_64-macos.tar.gz",
-        # "x86_64-windows" => "libcurl-impersonate-v#{LIB_VERSION}.x86_64-win32.tar.gz",
+        "aarch64-darwin" => "aarch64-darwin",
+        "x86_64-linux" => "x86_64-linux",
+        "x86_64-darwin" => "x86_64-darwin",
       }.freeze
 
       GEM_PLATFORMS_MAP = {
@@ -52,10 +45,6 @@ module EthonImpersonate
         libraries
       end
 
-      def self.release_url(target_arch_os = nil)
-        "#{LIB_DOWNLOAD_BASE_URL}#{lib_release_file(target_arch_os)}"
-      end
-
       def self.lib_names(target_os = nil)
         target_os ||= FFI::Platform::OS
         names = LIB_OS_FULL_NAME_MAP[target_os]
@@ -65,17 +54,6 @@ module EthonImpersonate
         end
 
         names
-      end
-
-      def self.lib_release_file(target_arch_os = nil)
-        target_arch_os ||= arch_os
-        release = LIB_PLATFORM_RELEASE_MAP[target_arch_os]
-
-        if release.nil?
-          abort "Unsupported architecture/OS combination: #{target_arch_os}"
-        end
-
-        release
       end
 
       def self.arch_os
